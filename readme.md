@@ -42,7 +42,7 @@ MediaPipe
 
 Clone the repository:
 
-git clone https://github.com/yourusername/repo-name.git
+git clone https://github.com/Andy-Joshi/Air_Writing.git
 
 Open app.html in your browser.
 
@@ -57,5 +57,6 @@ Real-time computer vision in the browser
 Frame-by-frame processing
 
 State management between frames
+
 
 Coordinate transformation
