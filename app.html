@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AirWrite ✍️</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #11111a;
+    --accent: #00f5c4;
+    --accent2: #7b5ea7;
+    --danger: #ff4757;
+    --text: #e8e8f0;
+    --muted: #4a4a6a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(10,10,15,0.95), transparent);
+  }
+
+  .logo {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,245,196,0.4);
+  }
+
+  .logo span { color: var(--text); }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    padding: 8px 16px;
+    border: 1px solid var(--muted);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    border-radius: 4px;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  .btn.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+
+  /* Color picker */
+  .color-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .color-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .color-dot:hover { transform: scale(1.2); }
+  .color-dot.selected { border-color: white; transform: scale(1.15); }
+
+  /* Stroke size */
+  .size-slider {
+    -webkit-appearance: none;
+    width: 80px;
+    height: 3px;
+    background: var(--muted);
+    outline: none;
+    border-radius: 2px;
+  }
+
+  .size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Main canvas area */
+  .canvas-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Video (background mirror) */
+  #video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0.12;
+    filter: blur(1px) saturate(0);
+  }
+
+  /* Drawing canvas */
+  #drawCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+    cursor: none;
+  }
+
+  /* Overlay canvas for hand landmarks */
+  #landmarkCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(-1);
+    pointer-events: none;
+  }
+
+  /* Status bar */
+  .status-bar {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    background: rgba(17,17,26,0.9);
+    border: 1px solid var(--muted);
+    border-radius: 40px;
+    padding: 10px 24px;
+    backdrop-filter: blur(10px);
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+
+  .status-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 1s infinite;
+  }
+
+  .status-dot.writing {
+    background: var(--danger);
+    box-shadow: 0 0 10px var(--danger);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .status-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    min-width: 180px;
+    text-align: center;
+  }
+
+  /* Pinch indicator */
+  .pinch-ring {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    transform: translate(-50%, -50%);
+    transition: width 0.1s, height 0.1s, border-color 0.1s, opacity 0.2s;
+    z-index: 200;
+    opacity: 0;
+    box-shadow: 0 0 12px rgba(0,245,196,0.5);
+  }
+
+  /* Loading overlay */
+  .loading {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .loading-title {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--accent);
+  }
+
+  .loading-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .loading-bar-wrap {
+    width: 240px;
+    height: 3px;
+    background: var(--muted);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .loading-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    border-radius: 2px;
+    transition: width 0.3s;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .tip-box {
+    position: absolute;
+    top: 80px;
+    left: 24px;
+    z-index: 100;
+    background: rgba(17,17,26,0.85);
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    line-height: 1.8;
+    backdrop-filter: blur(8px);
+    max-width: 220px;
+  }
+
+  .tip-box strong {
+    color: var(--accent);
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .tip-item { color: var(--text); }
+  .tip-item span { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div class="loading" id="loading">
+  <div class="loading-title">AirWrite</div>
+  <div class="loading-sub">LOADING HAND TRACKING MODEL...</div>
+  <div class="loading-bar-wrap">
+    <div class="loading-bar" id="loadingBar"></div>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">Air<span>Write</span></div>
+  <div class="controls">
+    <div class="color-row" id="colorPicker">
+      <div class="color-dot selected" data-color="#00f5c4" style="background:#00f5c4"></div>
+      <div class="color-dot" data-color="#ff4757" style="background:#ff4757"></div>
+      <div class="color-dot" data-color="#ffd32a" style="background:#ffd32a"></div>
+      <div class="color-dot" data-color="#ffffff" style="background:#ffffff"></div>
+      <div class="color-dot" data-color="#7b5ea7" style="background:#7b5ea7"></div>
+      <div class="color-dot" data-color="#ff6b9d" style="background:#ff6b9d"></div>
+    </div>
+    <input type="range" class="size-slider" id="strokeSize" min="2" max="20" value="4">
+    <button class="btn" id="toggleCam">📷 Camera</button>
+    <button class="btn danger" id="clearBtn">⌫ Clear</button>
+    <button class="btn" id="saveBtn">↓ Save</button>
+  </div>
+</div>
+
+<!-- Tips -->
+<div class="tip-box">
+  <strong>✦ HOW TO USE</strong>
+  <div class="tip-item"><span>✍️ Pinch</span> thumb + index to write</div>
+  <div class="tip-item"><span>✋ Open</span> hand to stop writing</div>
+  <div class="tip-item"><span>👆 1 finger</span> = pointer mode</div>
+</div>
+
+<!-- Canvas Area -->
+<div class="canvas-wrapper">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="drawCanvas"></canvas>
+  <canvas id="landmarkCanvas"></canvas>
+</div>
+
+<!-- Pinch Ring -->
+<div class="pinch-ring" id="pinchRing"></div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+  <div class="status-dot" id="camDot"></div>
+  <div class="status-dot" id="handDot"></div>
+  <div class="status-dot" id="writeDot"></div>
+  <div class="status-text" id="statusText">CAMERA OFF</div>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let camActive = false;
+let handDetected = false;
+let isWriting = false;
+let strokeColor = '#00f5c4';
+let strokeSize = 4;
+let mpCamera = null;
+
+// ── Advanced Smoothing State ───────────────────────────
+// One-Euro Filter — the gold standard for low-latency smooth tracking
+// Used in VR/AR systems: adapts to speed (fast = less smooth, slow = more smooth)
+class OneEuroFilter {
+  constructor(freq = 30, minCutoff = 1.2, beta = 0.02, dCutoff = 1.0) {
+    this.freq = freq;
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.dCutoff = dCutoff;
+    this.xPrev = null;
+    this.dxPrev = 0;
+    this.tPrev = null;
+  }
+  alpha(cutoff) {
+    const te = 1 / this.freq;
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / te);
+  }
+  filter(x, timestamp) {
+    if (this.xPrev === null) { this.xPrev = x; this.tPrev = timestamp; return x; }
+    const dt = Math.max((timestamp - this.tPrev) / 1000, 0.001);
+    this.freq = 1 / dt;
+    this.tPrev = timestamp;
+    const dx = (x - this.xPrev) * this.freq;
+    const edx = this.dxPrev + this.alpha(this.dCutoff) * (dx - this.dxPrev);
+    this.dxPrev = edx;
+    const cutoff = this.minCutoff + this.beta * Math.abs(edx);
+    const filtered = this.xPrev + this.alpha(cutoff) * (x - this.xPrev);
+    this.xPrev = filtered;
+    return filtered;
+  }
+  reset() { this.xPrev = null; this.dxPrev = 0; this.tPrev = null; }
+}
+
+const filterX = new OneEuroFilter();
+const filterY = new OneEuroFilter();
+
+// Catmull-Rom spline history
+const splinePoints = [];
+const MAX_SPLINE = 8;
+let lastDrawnX = null, lastDrawnY = null;
+
+const video = document.getElementById('video');
+const drawCanvas = document.getElementById('drawCanvas');
+const landmarkCanvas = document.getElementById('landmarkCanvas');
+const dctx = drawCanvas.getContext('2d');
+const lctx = landmarkCanvas.getContext('2d');
+
+const camDot = document.getElementById('camDot');
+const handDot = document.getElementById('handDot');
+const writeDot = document.getElementById('writeDot');
+const statusText = document.getElementById('statusText');
+const pinchRing = document.getElementById('pinchRing');
+const loadingBar = document.getElementById('loadingBar');
+const loadingEl = document.getElementById('loading');
+
+// ── Resize canvases ────────────────────────────────────
+function resizeCanvases() {
+  const saved = drawCanvas.toDataURL();
+  drawCanvas.width = window.innerWidth;
+  drawCanvas.height = window.innerHeight;
+  landmarkCanvas.width = window.innerWidth;
+  landmarkCanvas.height = window.innerHeight;
+  // Restore drawing
+  const img = new Image();
+  img.onload = () => dctx.drawImage(img, 0, 0);
+  img.src = saved;
+}
+
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+
+// ── Color picker ───────────────────────────────────────
+document.querySelectorAll('.color-dot').forEach(dot => {
+  dot.addEventListener('click', () => {
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+    dot.classList.add('selected');
+    strokeColor = dot.dataset.color;
+  });
+});
+
+document.getElementById('strokeSize').addEventListener('input', e => {
+  strokeSize = parseInt(e.target.value);
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  // Composite: bg + drawing
+  const tmp = document.createElement('canvas');
+  tmp.width = drawCanvas.width;
+  tmp.height = drawCanvas.height;
+  const t = tmp.getContext('2d');
+  t.fillStyle = '#0a0a0f';
+  t.fillRect(0, 0, tmp.width, tmp.height);
+  // Mirror back for saving
+  t.save();
+  t.scale(-1, 1);
+  t.drawImage(drawCanvas, -tmp.width, 0);
+  t.restore();
+  const a = document.createElement('a');
+  a.download = `airwrite_${Date.now()}.png`;
+  a.href = tmp.toDataURL();
+  a.click();
+});
+
+// ── Status updater ─────────────────────────────────────
+function updateStatus() {
+  camDot.className = 'status-dot' + (camActive ? ' active' : '');
+  handDot.className = 'status-dot' + (handDetected ? ' active' : '');
+  writeDot.className = 'status-dot' + (isWriting ? ' writing' : '');
+  if (!camActive) statusText.textContent = 'CAMERA OFF — CLICK 📷';
+  else if (!handDetected) statusText.textContent = 'SHOW YOUR HAND...';
+  else if (isWriting) statusText.textContent = '✍️  WRITING...';
+  else statusText.textContent = 'PINCH TO START WRITING';
+}
+
+updateStatus();
+
+// ── One-Euro + Catmull-Rom Drawing ────────────────────
+
+// Catmull-Rom: interpolates a smooth curve through actual points
+// Subdivides each segment into N sub-points for silky rendering
+function catmullRomSegment(ctx, p0, p1, p2, p3, segments = 12) {
+  for (let i = 1; i <= segments; i++) {
+    const t = i / segments;
+    const t2 = t * t, t3 = t2 * t;
+    const x = 0.5 * (
+      (2 * p1.x) +
+      (-p0.x + p2.x) * t +
+      (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 +
+      (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3
+    );
+    const y = 0.5 * (
+      (2 * p1.y) +
+      (-p0.y + p2.y) * t +
+      (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 +
+      (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3
+    );
+    ctx.lineTo(x, y);
+  }
+}
+
+function drawSmooth(rawX, rawY) {
+  const now = performance.now();
+  // One-Euro filter: fast = more responsive, slow = more smooth
+  const x = filterX.filter(rawX, now);
+  const y = filterY.filter(rawY, now);
+
+  // Minimum movement guard (< 0.5px skip)
+  if (lastDrawnX !== null) {
+    const dx = x - lastDrawnX, dy = y - lastDrawnY;
+    if (dx * dx + dy * dy < 0.25) return;
+  }
+
+  splinePoints.push({ x, y });
+  if (splinePoints.length > MAX_SPLINE) splinePoints.shift();
+
+  if (splinePoints.length < 4) {
+    // Not enough for spline yet — draw simple line
+    if (splinePoints.length === 2) {
+      const [a, b] = splinePoints;
+      dctx.beginPath();
+      dctx.strokeStyle = strokeColor;
+      dctx.lineWidth = strokeSize;
+      dctx.lineCap = 'round';
+      dctx.shadowColor = strokeColor;
+      dctx.shadowBlur = strokeSize * 1.5;
+      dctx.moveTo(a.x, a.y);
+      dctx.lineTo(b.x, b.y);
+      dctx.stroke();
+      dctx.shadowBlur = 0;
+    }
+    lastDrawnX = x; lastDrawnY = y;
+    return;
+  }
+
+  // Draw Catmull-Rom through last 4 points
+  const len = splinePoints.length;
+  const p0 = splinePoints[len - 4];
+  const p1 = splinePoints[len - 3];
+  const p2 = splinePoints[len - 2];
+  const p3 = splinePoints[len - 1];
+
+  dctx.beginPath();
+  dctx.strokeStyle = strokeColor;
+  dctx.lineWidth = strokeSize;
+  dctx.lineCap = 'round';
+  dctx.lineJoin = 'round';
+  dctx.shadowColor = strokeColor;
+  dctx.shadowBlur = strokeSize * 1.5;
+  dctx.moveTo(p1.x, p1.y);
+  catmullRomSegment(dctx, p0, p1, p2, p3, 16);
+  dctx.stroke();
+  dctx.shadowBlur = 0;
+
+  lastDrawnX = x; lastDrawnY = y;
+}
+
+function stopStroke() {
+  // Draw any remaining buffered points
+  if (splinePoints.length >= 2) {
+    const last = splinePoints[splinePoints.length - 1];
+    dctx.beginPath();
+    dctx.strokeStyle = strokeColor;
+    dctx.lineWidth = strokeSize;
+    dctx.lineCap = 'round';
+    dctx.moveTo(lastDrawnX ?? last.x, lastDrawnY ?? last.y);
+    dctx.lineTo(last.x, last.y);
+    dctx.stroke();
+  }
+  filterX.reset(); filterY.reset();
+  splinePoints.length = 0;
+  lastDrawnX = null; lastDrawnY = null;
+}
+
+// ── Hand landmark drawing ──────────────────────────────
+function drawHand(landmarks) {
+  lctx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+  const W = landmarkCanvas.width;
+  const H = landmarkCanvas.height;
+
+  // Connections
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],        // thumb
+    [0,5],[5,6],[6,7],[7,8],        // index
+    [5,9],[9,10],[10,11],[11,12],   // middle
+    [9,13],[13,14],[14,15],[15,16], // ring
+    [13,17],[17,18],[18,19],[19,20],[0,17] // pinky + palm
+  ];
+
+  lctx.strokeStyle = 'rgba(0,245,196,0.25)';
+  lctx.lineWidth = 1.5;
+  connections.forEach(([a, b]) => {
+    lctx.beginPath();
+    lctx.moveTo(landmarks[a].x * W, landmarks[a].y * H);
+    lctx.lineTo(landmarks[b].x * W, landmarks[b].y * H);
+    lctx.stroke();
+  });
+
+  // Joints
+  landmarks.forEach((lm, i) => {
+    const px = lm.x * W, py = lm.y * H;
+    lctx.beginPath();
+    lctx.arc(px, py, i === 8 || i === 4 ? 6 : 3, 0, Math.PI * 2);
+    lctx.fillStyle = i === 8 || i === 4 ? 'rgba(0,245,196,0.9)' : 'rgba(0,245,196,0.4)';
+    lctx.fill();
+  });
+}
+
+// ── Distance helper ────────────────────────────────────
+function dist(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+// ── MediaPipe setup ────────────────────────────────────
+const hands = new Hands({
+  locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.8,
+  minTrackingConfidence: 0.85
+});
+
+// Fake loading progress
+let prog = 0;
+const loadInterval = setInterval(() => {
+  prog = Math.min(prog + Math.random() * 15, 90);
+  loadingBar.style.width = prog + '%';
+}, 200);
+
+hands.onResults(results => {
+  // Hide loading on first result
+  if (loadingEl.style.display !== 'none') {
+    loadingBar.style.width = '100%';
+    clearInterval(loadInterval);
+    setTimeout(() => {
+      loadingEl.style.opacity = '0';
+      loadingEl.style.transition = 'opacity 0.5s';
+      setTimeout(() => loadingEl.style.display = 'none', 500);
+    }, 300);
+  }
+
+  const W = drawCanvas.width;
+  const H = drawCanvas.height;
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    handDetected = true;
+    const landmarks = results.multiHandLandmarks[0];
+
+    drawHand(landmarks);
+
+    const thumb = landmarks[4];
+    const index = landmarks[8];
+    const mid = landmarks[12];
+
+    // Pinch distance (normalized)
+    const pinchDist = dist(thumb, index);
+    const PINCH_THRESH = 0.055;
+
+    // Map to screen (mirrored)
+    const tipX = index.x * W;
+    const tipY = index.y * H;
+
+    // Update pinch ring
+    const screenX = (1 - index.x) * window.innerWidth;
+    const screenY = index.y * window.innerHeight;
+    const ringSize = Math.max(20, pinchDist * W * 1.5);
+    pinchRing.style.opacity = '1';
+    pinchRing.style.left = screenX + 'px';
+    pinchRing.style.top = screenY + 'px';
+    pinchRing.style.width = ringSize + 'px';
+    pinchRing.style.height = ringSize + 'px';
+    pinchRing.style.borderColor = pinchDist < PINCH_THRESH ? '#ff4757' : strokeColor;
+    pinchRing.style.boxShadow = `0 0 12px ${pinchDist < PINCH_THRESH ? '#ff4757' : strokeColor}`;
+
+    if (pinchDist < PINCH_THRESH) {
+      isWriting = true;
+      drawSmooth(tipX, tipY);
+    } else {
+      if (isWriting) stopStroke();
+      isWriting = false;
+    }
+  } else {
+    handDetected = false;
+    isWriting = false;
+    stopStroke();
+    lctx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    pinchRing.style.opacity = '0';
+  }
+
+  updateStatus();
+});
+
+// ── Camera toggle ──────────────────────────────────────
+document.getElementById('toggleCam').addEventListener('click', async () => {
+  if (!camActive) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' } });
+      video.srcObject = stream;
+      camActive = true;
+      document.getElementById('toggleCam').classList.add('active');
+
+      mpCamera = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 1280,
+        height: 720
+      });
+      mpCamera.start();
+    } catch (err) {
+      alert('Camera access denied. Please allow camera permissions.');
+    }
+  } else {
+    if (mpCamera) mpCamera.stop();
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+    camActive = false;
+    handDetected = false;
+    isWriting = false;
+    lctx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    pinchRing.style.opacity = '0';
+    document.getElementById('toggleCam').classList.remove('active');
+  }
+  updateStatus();
+});
+
+// ── Auto-start cam ─────────────────────────────────────
+setTimeout(() => {
+  document.getElementById('toggleCam').click();
+}, 800);
+</script>
+</body>
+</html>
